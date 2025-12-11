@@ -284,6 +284,17 @@ wget https://github.com/ceresimaging/ceres-wheels/releases/download/pytorch-2.9.
 pip install torch-2.9.1+cu126-cp310-cp310-manylinux_2_35_aarch64.whl
 ```
 
+### Using in requirements.txt
+
+Reference the wheel directly using the `@ URL` syntax:
+
+```
+numpy<2.0
+torch @ https://github.com/ceresimaging/ceres-wheels/releases/download/pytorch-2.9.1-arm64-sm75/torch-2.9.1+cu126-cp310-cp310-manylinux_2_35_aarch64.whl
+torchvision
+sympy==1.13.3
+```
+
 ## Step 7: Test on g5g Instance (Optional)
 
 ```bash
