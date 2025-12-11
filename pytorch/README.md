@@ -11,7 +11,7 @@ This guide builds a PyTorch wheel for ARM64 with CUDA 12.6 and sm_75 support for
 - [Step 3: Clone PyTorch](#step-3-clone-pytorch)
 - [Step 4: Build PyTorch](#step-4-build-pytorch)
 - [Step 5: Verify the Wheel](#step-5-verify-the-wheel)
-- [Step 6: Upload to AWS CodeArtifact](#step-6-upload-to-aws-codeartifact)
+- [Step 6: Upload to GitHub Releases](#step-6-upload-to-github-releases)
 - [Step 7: Test on g5g Instance (Optional)](#step-7-test-on-g5g-instance-optional)
 - [Using in Docker](#using-in-docker)
   - [Testing the Container](#testing-the-container)
@@ -231,41 +231,66 @@ python3.10 -c "import torch; print(f'PyTorch {torch.__version__}, CUDA {torch.ve
 deactivate
 ```
 
-## Step 6: Upload to AWS CodeArtifact
+## Step 6: Upload to GitHub Releases
+
+GitHub Packages doesn't support PyPI wheels well, so we'll use GitHub Releases instead. This makes the wheel publicly downloadable.
 
 ```bash
-# First, configure AWS credentials if not already done:
-#   aws configure
-# Or use an IAM instance profile attached to the EC2 instance.
+# Install GitHub CLI
+curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+sudo apt-get update && sudo apt-get install -y gh
 
-# Set AWS variables
-export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-export AWS_REGION=us-west-2
+# Authenticate with GitHub
+gh auth login
 
-# Install twine for uploading
-pip install twine
+# Rename wheel to simpler filename and create release
+cd ~/pytorch/dist
+ORIGINAL_WHEEL=$(ls torch*.whl)
+# We'll follow the naming convention of official PyTorch wheels
+# See https://download.pytorch.org/whl/torch/
+SIMPLE_WHEEL="torch-2.9.1+cu126-cp310-cp310-manylinux_2_35_aarch64.whl"
+cp "$ORIGINAL_WHEEL" "$SIMPLE_WHEEL"
 
-# Login to CodeArtifact (domain: ceres, repository: ceres)
-aws codeartifact login --tool twine \
-    --domain ceres --domain-owner $AWS_ACCOUNT_ID \
-    --repository ceres --region $AWS_REGION
+gh release create "pytorch-2.9.1-arm64-sm75" \
+    --repo ceresimaging/ceres-wheels \
+    --title "PyTorch 2.9.1 ARM64 + CUDA 12.6 + sm_75" \
+    --notes "PyTorch wheel for ARM64 with NVIDIA T4G (sm_75) support.
 
-# Upload wheel
-twine upload --repository codeartifact ~/pytorch/dist/torch*.whl
+Built on Ubuntu 22.04 (Glibc 2.35) with:
+- Python 3.10
+- CUDA 12.6
+- cuDNN 9
+- SM architecture: 7.5 (T4G)
+
+Install with:
+\`\`\`bash
+pip install https://github.com/ceresimaging/ceres-wheels/releases/download/pytorch-2.9.1-arm64-sm75/torch-2.9.1+cu126-cp310-cp310-manylinux_2_35_aarch64.whl
+\`\`\`
+
+Remember to also install \`numpy<2.0\` and CUDA runtime as dependencies. See the README for details.
+" \
+    "$SIMPLE_WHEEL"
+```
+
+### Installing from GitHub Releases
+
+```bash
+# Direct install
+pip install https://github.com/ceresimaging/ceres-wheels/releases/download/pytorch-2.9.1-arm64-sm75/torch-2.9.1+cu126-cp310-cp310-manylinux_2_35_aarch64.whl
+
+# Or download first
+wget https://github.com/ceresimaging/ceres-wheels/releases/download/pytorch-2.9.1-arm64-sm75/torch-2.9.1+cu126-cp310-cp310-manylinux_2_35_aarch64.whl
+pip install torch-2.9.1+cu126-cp310-cp310-manylinux_2_35_aarch64.whl
 ```
 
 ## Step 7: Test on g5g Instance (Optional)
 
 ```bash
 # On a g5g instance with GPU
-export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-export AWS_REGION=us-west-2
+pip install https://github.com/ceresimaging/ceres-wheels/releases/download/pytorch-2.9.1-arm64-sm75/torch-2.9.1+cu126-cp310-cp310-manylinux_2_35_aarch64.whl
+pip install "numpy<2.0"
 
-aws codeartifact login --tool pip \
-    --domain ceres --domain-owner $AWS_ACCOUNT_ID \
-    --repository ceres --region $AWS_REGION
-
-pip install torch "numpy<2.0"
 python3 -c "
 import torch
 print(f'CUDA available: {torch.cuda.is_available()}')
@@ -404,6 +429,8 @@ GPU multi-processors: 40
 
 GPU tensor operation: SUCCESS
 ```
+
+> **Note:** PyTorch internally reports the full version with git hash (`2.9.1a0+gitd38164a`), even though the wheel filename is simplified.
 
 ## Troubleshooting
 
