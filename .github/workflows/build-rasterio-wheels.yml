@@ -1,0 +1,166 @@
+name: Build Rasterio Wheels
+
+on:
+  workflow_dispatch:
+    inputs:
+      rasterio_version:
+        description: 'Rasterio version to build'
+        required: true
+        default: '1.3.9'
+      gdal_version:
+        description: 'GDAL version to use'
+        required: true
+        default: '3.6.4'
+      publish:
+        description: 'Publish to GitHub Releases'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write  # Required for creating releases
+
+jobs:
+  build-wheels:
+    name: Build rasterio ${{ inputs.rasterio_version }} for ARM64 Linux
+    runs-on: ubuntu-24.04-arm  # Native ARM64 runner (free for public repos)
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install cibuildwheel with uv support
+        run: |
+          python -m pip install --upgrade pip
+          pip install 'cibuildwheel>=2.17' 'build[uv]'
+
+      - name: Cache GDAL build
+        uses: actions/cache@v4
+        id: gdal-cache
+        with:
+          path: /usr/local
+          key: gdal-${{ inputs.gdal_version }}-manylinux_2_28-aarch64-${{ hashFiles('rasterio/install-deps.sh', 'rasterio/build-gdal.sh') }}
+          restore-keys: |
+            gdal-${{ inputs.gdal_version }}-manylinux_2_28-aarch64-
+
+      - name: Build wheels
+        run: |
+          python -m cibuildwheel --output-dir wheelhouse
+        env:
+          # Build configuration
+          CIBW_BUILD: cp310-manylinux_aarch64
+          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
+
+          # GDAL build (runs before wheel build)
+          CIBW_BEFORE_ALL_LINUX: "bash {project}/rasterio/build-gdal.sh"
+
+          # Environment variables for build
+          CIBW_ENVIRONMENT: >
+            GDAL_VERSION=${{ inputs.gdal_version }}
+            GDAL_CONFIG=/usr/local/bin/gdal-config
+            PACKAGE_DATA=1
+
+          # Use uv for faster dependency installation
+          CIBW_BUILD_FRONTEND: "build[uv]"
+
+          # Test command (basic smoke test)
+          CIBW_TEST_COMMAND: "python -c 'import rasterio; print(f\"rasterio {rasterio.__version__}, GDAL {rasterio.__gdal_version__}\")'"
+
+          # Build verbosity
+          CIBW_BUILD_VERBOSITY: 1
+
+          # Specify rasterio version to build
+          CIBW_BUILD_ARGS: "--config-settings=--build-option=--version=${{ inputs.rasterio_version }}"
+
+          # Skip existing builds
+          CIBW_SKIP_IF_EXISTS: true
+
+      - name: List built wheels
+        run: |
+          ls -lh wheelhouse/
+          echo "Wheel details:"
+          for wheel in wheelhouse/*.whl; do
+            echo "  $(basename $wheel): $(du -h $wheel | cut -f1)"
+          done
+
+      - name: Verify wheel
+        run: |
+          python -m venv test-env
+          source test-env/bin/activate
+          pip install wheelhouse/*.whl
+          python rasterio/test-wheel.py
+          deactivate
+
+      - name: Upload wheels as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rasterio-${{ inputs.rasterio_version }}-cp310-manylinux_2_28_aarch64
+          path: wheelhouse/*.whl
+          retention-days: 30
+
+      - name: Create Release
+        if: ${{ inputs.publish }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: rasterio-${{ inputs.rasterio_version }}_py310_gdal${{ inputs.gdal_version }}_linux_aarch64
+          name: Rasterio ${{ inputs.rasterio_version }} (Python 3.10, ARM64 Linux)
+          body: |
+            ## Rasterio ${{ inputs.rasterio_version }} Wheel for ARM64 Linux
+
+            **Python Version**: 3.10
+            **GDAL Version**: ${{ inputs.gdal_version }}
+            **Platform**: `manylinux_2_28_aarch64` (Ubuntu 22.04+ compatible)
+            **Architecture**: ARM64 (aarch64)
+
+            ### Installation
+
+            ```bash
+            pip install rasterio-${{ inputs.rasterio_version }}-cp310-cp310-manylinux_2_28_aarch64.whl
+            ```
+
+            Or install directly from this release:
+
+            ```bash
+            pip install https://github.com/${{ github.repository }}/releases/download/rasterio-${{ inputs.rasterio_version }}_py310_gdal${{ inputs.gdal_version }}_linux_aarch64/rasterio-${{ inputs.rasterio_version }}-cp310-cp310-manylinux_2_28_aarch64.whl
+            ```
+
+            ### What's Included
+
+            This wheel includes:
+            - Rasterio ${{ inputs.rasterio_version }}
+            - GDAL ${{ inputs.gdal_version }} (vendored)
+            - PROJ 9.0+
+            - GEOS 3.11+
+            - Format drivers: GeoTIFF, HDF5, netCDF, JPEG2000, PNG, JPEG, WebP
+            - Compression libraries: zlib, zstd, lzma
+
+            ### System Requirements
+
+            - ARM64 Linux system (AWS Graviton, Ampere, etc.)
+            - glibc 2.28 or newer (Ubuntu 22.04+, Debian 12+, Amazon Linux 2023+)
+            - Python 3.10
+
+            ### Verification
+
+            After installation, verify with:
+
+            ```python
+            import rasterio
+            print(f"rasterio {rasterio.__version__}")
+            print(f"GDAL {rasterio.__gdal_version__}")
+            ```
+
+            ### Notes
+
+            - This is a self-contained wheel with GDAL and dependencies vendored
+            - No system GDAL installation required
+            - Built with cibuildwheel + uv on GitHub Actions
+
+            For issues, see [rasterio documentation](https://rasterio.readthedocs.io/) or open an issue.
+          files: wheelhouse/*.whl
+          draft: false
+          prerelease: false
