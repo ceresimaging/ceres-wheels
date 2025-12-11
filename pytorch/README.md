@@ -255,7 +255,7 @@ cp "$ORIGINAL_WHEEL" "$SIMPLE_WHEEL"
 gh release create "pytorch-2.9.1-arm64-sm75" \
     --repo ceresimaging/ceres-wheels \
     --title "PyTorch 2.9.1 ARM64 + CUDA 12.6 + sm_75" \
-    --notes "PyTorch wheel for ARM64 with NVIDIA T4G (sm_75) support.
+    --notes "PyTorch wheel for ARM64 with NVIDIA T4G (sm_75) support, for use on AWS g5g instances.
 
 Built on Ubuntu 22.04 (Glibc 2.35) with:
 - Python 3.10
