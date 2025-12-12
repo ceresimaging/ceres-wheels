@@ -5,75 +5,83 @@ set -euo pipefail
 # System Dependencies for GDAL Build
 #############################################################################
 # Installs all required packages for building GDAL from source
-# Designed for manylinux_2_28 containers (Ubuntu 22.04 based)
+# Designed for manylinux_2_28 containers (AlmaLinux 8 based, uses yum/dnf)
 #############################################################################
 
 echo "============================================================"
 echo "Installing GDAL Build Dependencies"
 echo "============================================================"
 
+# Enable EPEL and PowerTools/CRB for additional packages
+echo ">>> Enabling EPEL and PowerTools repositories..."
+yum install -y epel-release
+yum config-manager --set-enabled powertools || yum config-manager --set-enabled crb || true
+
 # Update package lists
-apt-get update
+yum makecache
 
 # Install build essentials and tools
 echo ">>> Installing build tools..."
-apt-get install -y --no-install-recommends \
-    build-essential \
+yum install -y \
+    gcc \
+    gcc-c++ \
+    make \
     cmake \
     wget \
     ca-certificates \
-    pkg-config
+    pkgconfig
 
 # Geospatial libraries
 echo ">>> Installing geospatial libraries..."
-apt-get install -y --no-install-recommends \
-    libproj-dev \
-    proj-data \
-    proj-bin \
-    libgeos-dev \
-    libsqlite3-dev \
-    libspatialite-dev
+yum install -y \
+    proj-devel \
+    proj \
+    geos-devel \
+    sqlite-devel \
+    libspatialite-devel
 
 # Scientific data format libraries
 echo ">>> Installing scientific format libraries..."
-apt-get install -y --no-install-recommends \
-    libhdf5-dev \
-    libnetcdf-dev
+yum install -y \
+    hdf5-devel \
+    netcdf-devel
 
 # Image format libraries
 echo ">>> Installing image format libraries..."
-apt-get install -y --no-install-recommends \
-    libtiff-dev \
-    libpng-dev \
-    libjpeg-dev \
-    libwebp-dev \
-    libgif-dev \
-    libopenjp2-7-dev
+yum install -y \
+    libtiff-devel \
+    libpng-devel \
+    libjpeg-turbo-devel \
+    libwebp-devel \
+    giflib-devel \
+    openjpeg2-devel
 
 # Compression libraries
 echo ">>> Installing compression libraries..."
-apt-get install -y --no-install-recommends \
-    zlib1g-dev \
-    libzstd-dev \
-    liblzma-dev \
-    libaec-dev
+yum install -y \
+    zlib-devel \
+    libzstd-devel \
+    xz-devel
+
+# libaec may not be available, skip if not found
+yum install -y libaec-devel || echo "  libaec-devel not available, skipping"
 
 # Network and security libraries
 echo ">>> Installing network libraries..."
-apt-get install -y --no-install-recommends \
-    libcurl4-openssl-dev \
-    libssl-dev
+yum install -y \
+    libcurl-devel \
+    openssl-devel
 
 # Additional dependencies
 echo ">>> Installing additional dependencies..."
-apt-get install -y --no-install-recommends \
-    libexpat1-dev \
-    libjson-c-dev
+yum install -y \
+    expat-devel \
+    json-c-devel
 
 # Clean up to reduce image size
 echo ">>> Cleaning up..."
-apt-get clean
-rm -rf /var/lib/apt/lists/*
+yum clean all
+rm -rf /var/cache/yum
 
 echo ""
 echo "============================================================"

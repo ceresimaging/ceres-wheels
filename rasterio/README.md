@@ -210,7 +210,7 @@ rasterio/
 ### Build Environment
 
 - **Runner**: GitHub-hosted `ubuntu-24.04-arm` (free for public repos)
-- **Container**: manylinux_2_28_aarch64 (Ubuntu 22.04 based)
+- **Container**: manylinux_2_28_aarch64 (AlmaLinux 8 based)
 - **Tools**: cibuildwheel + uv for fast builds
 - **Caching**: GDAL installation cached to reduce rebuild time
 
