@@ -17,33 +17,26 @@ Custom PyTorch builds for ARM64 with T4G (sm_75) CUDA support for AWS g5g instan
 
 ### 🗺️ Rasterio
 
-Rasterio wheels for ARM64 Linux with GDAL bundled.
+Rasterio wheels for ARM64 Linux.
 
 - **Status**: Automated GitHub Actions builds
 - **Documentation**: [rasterio/README.md](rasterio/README.md)
 - **Releases**: [GitHub Releases](../../releases)
-- **Target**: ARM64 Linux (manylinux_2_28)
-- **Build Method**: GitHub Actions (cibuildwheel + uv)
+- **Target**: ARM64 Linux
+- **Build Method**: GitHub Actions (native ARM64 runner)
 
 [![Build Rasterio Wheels](https://github.com/ceresimaging/ceres-wheels/actions/workflows/build-rasterio-wheels.yml/badge.svg)](https://github.com/ceresimaging/ceres-wheels/actions/workflows/build-rasterio-wheels.yml)
 
 ## Quick Start
 
-### Rasterio (Recommended)
-
-Download pre-built wheels from [GitHub Releases](../../releases):
+### Rasterio
 
 ```bash
-# Find the latest release for rasterio
-# Download the .whl file for your Python version
+# Install system GDAL first
+apt-get install libgdal-dev
 
-pip install rasterio-1.3.9-cp310-cp310-manylinux_2_28_aarch64.whl
-```
-
-Or install directly:
-
-```bash
-pip install https://github.com/ceresimaging/ceres-wheels/releases/download/rasterio-1.3.9_py310_gdal3.6.4_linux_aarch64/rasterio-1.3.9-cp310-cp310-manylinux_2_28_aarch64.whl
+# Install wheel from GitHub Release
+pip install https://github.com/ceresimaging/ceres-wheels/releases/download/rasterio-1.4.3-arm64/rasterio-1.4.3-cp310-cp310-linux_aarch64.whl
 ```
 
 ### PyTorch
@@ -70,13 +63,13 @@ This repository fills the gap by providing:
 | Package | Architecture | Python | Publishing | Build Time | Automation |
 |---------|--------------|--------|------------|------------|------------|
 | PyTorch | ARM64 | 3.10 | GitHub Releases | 1.5-2 hrs | Manual |
-| Rasterio | ARM64 | 3.10 | GitHub Releases | 60 min (15 min cached) | Automated |
+| Rasterio | ARM64 | 3.10 | GitHub Releases | ~5 min | Automated |
 
 ## System Requirements
 
 ### Rasterio
 
-- **OS**: Linux with glibc 2.28+ (Ubuntu 22.04+, Debian 12+, Amazon Linux 2023+)
+- **OS**: Linux with system GDAL installed
 - **Architecture**: ARM64 (aarch64)
 - **Python**: 3.10
 
@@ -94,10 +87,9 @@ This repository fills the gap by providing:
 1. Go to [Actions → Build Rasterio Wheels](../../actions/workflows/build-rasterio-wheels.yml)
 2. Click "Run workflow"
 3. Configure:
-   - Rasterio version (e.g., `1.3.9`)
-   - GDAL version (e.g., `3.6.4`)
+   - Rasterio version (e.g., `1.4.3`)
    - Publish: `false` for testing, `true` for release
-4. Wait for build (60 min first time, 15 min with cache)
+4. Wait for build (~5 min)
 5. Download from artifacts or releases
 
 ### PyTorch (Manual)
@@ -115,9 +107,6 @@ ceres-wheels/
 │   ├── README.md                        # PyTorch build guide
 │   └── setup-ec2.sh                     # EC2 setup script
 ├── rasterio/
-│   ├── build-gdal.sh                    # GDAL compilation
-│   ├── install-deps.sh                  # System dependencies
-│   ├── test-wheel.py                    # Verification tests
 │   └── README.md                        # Rasterio documentation
 ├── README.md                            # This file
 └── LICENSE
@@ -127,11 +116,9 @@ ceres-wheels/
 
 ### Rasterio Builds
 
-- **CI/CD**: GitHub Actions (ubuntu-24.04-arm runners)
-- **Build Tool**: [cibuildwheel](https://cibuildwheel.pypa.io/) 2.17+
-- **Package Manager**: [uv](https://github.com/astral-sh/uv) (ultra-fast pip alternative)
-- **Container**: manylinux_2_28_aarch64
-- **Compliance**: auditwheel for vendoring dependencies
+- **CI/CD**: GitHub Actions (ubuntu-24.04-arm native runners)
+- **Build**: `pip wheel --no-binary rasterio`
+- **Dependencies**: System GDAL via apt
 
 ### PyTorch Builds
 
@@ -141,20 +128,6 @@ ceres-wheels/
 - **Publishing**: AWS CodeArtifact
 
 ## FAQs
-
-### Why not use QEMU for ARM64 builds?
-
-QEMU emulation is 5-10x slower. Building GDAL alone would take 4-6 hours instead of 45 minutes. GitHub provides free native ARM64 runners for public repos.
-
-### Why bundle GDAL in rasterio wheels?
-
-Ensures:
-- Exact GDAL version compatibility
-- No system dependency conflicts
-- Portable wheels that work anywhere
-- All format drivers included
-
-Trade-off: Larger wheel size (~50MB vs ~10MB), but worth it for portability.
 
 ### Can I build for multiple Python versions?
 
