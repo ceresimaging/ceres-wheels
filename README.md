@@ -10,7 +10,7 @@ This repository builds and distributes binary wheels for Python packages that la
 
 Custom PyTorch builds for ARM64 with T4G (sm_75) CUDA support for AWS g5g instances.
 
-- **Status**: Manual builds, published to AWS CodeArtifact
+- **Status**: Manual builds, published to this Github Releases page
 - **Documentation**: [pytorch/README.md](pytorch/README.md)
 - **Target**: ARM64 + CUDA 12.6 + sm_75 support
 - **Build Method**: Manual EC2 compilation
@@ -69,7 +69,7 @@ This repository fills the gap by providing:
 
 | Package | Architecture | Python | Publishing | Build Time | Automation |
 |---------|--------------|--------|------------|------------|------------|
-| PyTorch | ARM64 | 3.10 | CodeArtifact | 1.5-2 hrs | Manual |
+| PyTorch | ARM64 | 3.10 | GitHub Releases | 1.5-2 hrs | Manual |
 | Rasterio | ARM64 | 3.10 | GitHub Releases | 60 min (15 min cached) | Automated |
 
 ## System Requirements
