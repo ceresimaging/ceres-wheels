@@ -39,8 +39,8 @@ jobs:
           pip install --upgrade pip wheel auditwheel patchelf
           pip wheel rasterio==${{ inputs.rasterio_version }} --no-binary rasterio -w /tmp/wheels/
 
-          # Repair wheel to get manylinux tag
-          auditwheel repair /tmp/wheels/rasterio-*.whl -w dist/ --plat manylinux_2_35_aarch64
+          # Repair wheel to get manylinux tag (2_39 matches Ubuntu 24.04's glibc)
+          auditwheel repair /tmp/wheels/rasterio-*.whl -w dist/ --plat manylinux_2_39_aarch64
           ls -lh dist/
 
       - name: Test wheel
@@ -70,12 +70,12 @@ jobs:
             ### Installation
 
             ```bash
-            pip install https://github.com/${{ github.repository }}/releases/download/rasterio-${{ inputs.rasterio_version }}-arm64/rasterio-${{ inputs.rasterio_version }}-cp310-cp310-manylinux_2_35_aarch64.whl
+            pip install https://github.com/${{ github.repository }}/releases/download/rasterio-${{ inputs.rasterio_version }}-arm64/rasterio-${{ inputs.rasterio_version }}-cp310-cp310-manylinux_2_39_aarch64.whl
             ```
 
             **Note**: Requires system GDAL (`apt-get install libgdal-dev` or equivalent).
 
-            **Compatibility**: glibc 2.35+ (Ubuntu 22.04+, Debian 12+)
+            **Compatibility**: glibc 2.39+ (Ubuntu 24.04+)
           files: dist/*.whl
           draft: false
           prerelease: false
