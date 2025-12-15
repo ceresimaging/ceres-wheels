@@ -7,6 +7,15 @@ on:
         description: 'Rasterio version to build'
         required: true
         default: '1.3.9'
+      python_version:
+        description: 'Python version'
+        required: true
+        default: '3.12'
+        type: choice
+        options:
+          - '3.10'
+          - '3.11'
+          - '3.12'
       publish:
         description: 'Publish to GitHub Releases'
         type: boolean
@@ -32,7 +41,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '${{ inputs.python_version }}'
 
       - name: Build wheel
         run: |
@@ -42,6 +51,9 @@ jobs:
           # Repair wheel to get manylinux tag (2_39 matches Ubuntu 24.04's glibc)
           auditwheel repair /tmp/wheels/rasterio-*.whl -w dist/ --plat manylinux_2_39_aarch64
           ls -lh dist/
+
+          # Save wheel filename for release notes
+          echo "WHEEL_NAME=$(ls dist/)" >> $GITHUB_ENV
 
       - name: Test wheel
         run: |
@@ -55,7 +67,7 @@ jobs:
       - name: Upload wheel as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rasterio-${{ inputs.rasterio_version }}-cp310-linux-aarch64
+          name: rasterio-${{ inputs.rasterio_version }}-py${{ inputs.python_version }}-linux-aarch64
           path: dist/*.whl
           retention-days: 30
 
@@ -63,18 +75,18 @@ jobs:
         if: ${{ inputs.publish }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: rasterio-${{ inputs.rasterio_version }}-arm64
-          name: Rasterio ${{ inputs.rasterio_version }} (ARM64 Linux)
+          tag_name: rasterio-${{ inputs.rasterio_version }}-py${{ inputs.python_version }}-arm64
+          name: Rasterio ${{ inputs.rasterio_version }} (Python ${{ inputs.python_version }}, ARM64 Linux)
           body: |
             ## Rasterio ${{ inputs.rasterio_version }} for ARM64 Linux
 
-            **Python**: 3.10
+            **Python**: ${{ inputs.python_version }}
             **Architecture**: ARM64 (aarch64)
 
             ### Installation
 
             ```bash
-            pip install https://github.com/${{ github.repository }}/releases/download/rasterio-${{ inputs.rasterio_version }}-arm64/rasterio-${{ inputs.rasterio_version }}-cp310-cp310-manylinux_2_39_aarch64.whl
+            pip install https://github.com/${{ github.repository }}/releases/download/rasterio-${{ inputs.rasterio_version }}-py${{ inputs.python_version }}-arm64/${{ env.WHEEL_NAME }}
             ```
 
             **Requirements**:
