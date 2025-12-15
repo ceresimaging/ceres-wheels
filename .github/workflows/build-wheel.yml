@@ -1,0 +1,118 @@
+name: Build ARM64 Wheel
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package to build (e.g., rasterio==1.3.9)'
+        required: true
+        default: 'rasterio==1.3.9'
+      python_version:
+        description: 'Python version'
+        required: true
+        default: '3.12'
+        type: choice
+        options:
+          - '3.10'
+          - '3.11'
+          - '3.12'
+      system_deps:
+        description: 'System dependencies (space-separated apt packages)'
+        required: false
+        default: 'libgdal-dev'
+      publish:
+        description: 'Publish to GitHub Releases'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-wheel:
+    name: Build ${{ inputs.package }} for ARM64
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        if: ${{ inputs.system_deps != '' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ inputs.system_deps }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '${{ inputs.python_version }}'
+
+      - name: Build wheel
+        run: |
+          pip install --upgrade pip wheel auditwheel patchelf
+          pip wheel ${{ inputs.package }} --no-binary :all: -w /tmp/wheels/
+
+          # Get the main package wheel (not dependencies)
+          PACKAGE_NAME=$(echo "${{ inputs.package }}" | sed 's/[=<>!].*//' | tr '[:upper:]' '[:lower:]' | tr '-' '_')
+          WHEEL=$(ls /tmp/wheels/${PACKAGE_NAME}-*.whl 2>/dev/null | head -1)
+
+          if [ -z "$WHEEL" ]; then
+            echo "ERROR: Could not find wheel for $PACKAGE_NAME"
+            ls -la /tmp/wheels/
+            exit 1
+          fi
+
+          echo "Found wheel: $WHEEL"
+
+          # Repair wheel to get manylinux tag
+          auditwheel repair "$WHEEL" -w dist/ --plat manylinux_2_39_aarch64
+          ls -lh dist/
+
+          # Save wheel filename for release notes
+          echo "WHEEL_NAME=$(ls dist/)" >> $GITHUB_ENV
+
+      - name: Test wheel
+        run: |
+          pip install dist/*.whl
+          PACKAGE_NAME=$(echo "${{ inputs.package }}" | sed 's/[=<>!].*//')
+          python -c "import ${PACKAGE_NAME//-/_}; print('Import successful')"
+
+      - name: Parse package info
+        id: pkg
+        run: |
+          FULL="${{ inputs.package }}"
+          NAME=$(echo "$FULL" | sed 's/[=<>!].*//')
+          VERSION=$(echo "$FULL" | sed 's/.*==//')
+          echo "name=$NAME" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Upload wheel as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pkg.outputs.name }}-${{ steps.pkg.outputs.version }}-py${{ inputs.python_version }}-linux-aarch64
+          path: dist/*.whl
+          retention-days: 30
+
+      - name: Create Release
+        if: ${{ inputs.publish }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.pkg.outputs.name }}-${{ steps.pkg.outputs.version }}-py${{ inputs.python_version }}-arm64
+          name: ${{ steps.pkg.outputs.name }} ${{ steps.pkg.outputs.version }} (Python ${{ inputs.python_version }}, ARM64 Linux)
+          body: |
+            ## ${{ steps.pkg.outputs.name }} ${{ steps.pkg.outputs.version }} for ARM64 Linux
+
+            **Python**: ${{ inputs.python_version }}
+            **Architecture**: ARM64 (aarch64)
+
+            ### Installation
+
+            ```bash
+            pip install https://github.com/${{ github.repository }}/releases/download/${{ steps.pkg.outputs.name }}-${{ steps.pkg.outputs.version }}-py${{ inputs.python_version }}-arm64/${{ env.WHEEL_NAME }}
+            ```
+
+            **Compatibility**: glibc 2.39+ (Ubuntu 24.04+)
+          files: dist/*.whl
+          draft: false
+          prerelease: false
