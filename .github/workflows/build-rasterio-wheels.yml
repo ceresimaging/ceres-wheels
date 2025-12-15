@@ -45,6 +45,10 @@ jobs:
 
       - name: Test wheel
         run: |
+          # rasterio 1.3.x requires numpy<2
+          if [[ "${{ inputs.rasterio_version }}" == 1.3.* ]]; then
+            pip install "numpy<2"
+          fi
           pip install dist/rasterio-*.whl
           python -c "import rasterio; print(f'rasterio {rasterio.__version__}, GDAL {rasterio.__gdal_version__}')"
 
@@ -73,7 +77,9 @@ jobs:
             pip install https://github.com/${{ github.repository }}/releases/download/rasterio-${{ inputs.rasterio_version }}-arm64/rasterio-${{ inputs.rasterio_version }}-cp310-cp310-manylinux_2_39_aarch64.whl
             ```
 
-            **Note**: Requires system GDAL (`apt-get install libgdal-dev` or equivalent).
+            **Requirements**:
+            - System GDAL (`apt-get install libgdal-dev`)
+            - `numpy<2` for rasterio 1.3.x
 
             **Compatibility**: glibc 2.39+ (Ubuntu 24.04+)
           files: dist/*.whl
