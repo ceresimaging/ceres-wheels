@@ -2,46 +2,33 @@
 
 Pre-built rasterio wheels for ARM64 Linux (aarch64).
 
-## Quick Start
-
-### Building
-
-1. Go to [Actions → Build Rasterio Wheels](../../actions/workflows/build-rasterio-wheels.yml)
-2. Click "Run workflow"
-3. Set rasterio version (e.g., `1.4.3`)
-4. Set publish to `true` for release, `false` for testing
-5. Download from artifacts or releases
-
-### Installing
+## Installation
 
 ```bash
-# From GitHub Release
-pip install https://github.com/ceresimaging/ceres-wheels/releases/download/rasterio-1.4.3-arm64/rasterio-1.4.3-cp310-cp310-linux_aarch64.whl
-
 # Requires system GDAL
-apt-get install libgdal-dev  # or equivalent for your distro
+apt-get install libgdal-dev
+
+# Install from GitHub Release
+pip install https://github.com/ceresimaging/ceres-wheels/releases/download/rasterio-1.3.9-py3.12-arm64/rasterio-1.3.9-cp312-cp312-manylinux_2_39_aarch64.whl
+
+# For rasterio 1.3.x, also need numpy<2
+pip install "numpy<2"
 ```
 
-## How It Works
+## Building
 
-The workflow runs on GitHub's native ARM64 runner (`ubuntu-24.04-arm`):
+Use either workflow:
 
-```bash
-apt-get install -y libgdal-dev python3-dev
-pip wheel rasterio==1.4.3 --no-binary rasterio -w dist/
-```
+1. **Generic**: [Actions → Build ARM64 Wheel](../../actions/workflows/build-wheel.yml)
+   - Package: `rasterio==1.3.9`
+   - System deps: `libgdal-dev`
 
-That's it. `pip wheel` handles the Cython compilation.
+2. **Rasterio-specific**: [Actions → Build Rasterio Wheels](../../actions/workflows/build-rasterio-wheels.yml)
+   - Has built-in `numpy<2` handling for 1.3.x versions
 
 ## Requirements
 
-- ARM64 Linux system
-- System GDAL library installed
-- Python 3.10
-
-## Version Compatibility
-
-| Rasterio | Python | Status |
-|----------|--------|--------|
-| 1.4.3 | 3.10 | ✅ Default |
-| 1.3.9 | 3.10 | ✅ Tested |
+- ARM64 Linux (Ubuntu 24.04+ / glibc 2.39+)
+- System GDAL installed
+- Python 3.10, 3.11, or 3.12
+- `numpy<2` for rasterio 1.3.x
