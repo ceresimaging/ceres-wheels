@@ -31,7 +31,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Install system dependencies
         run: |
@@ -39,7 +39,7 @@ jobs:
           sudo apt-get install -y libgdal-dev python3-dev
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: '${{ inputs.python_version }}'
 
@@ -65,7 +65,7 @@ jobs:
           python -c "import rasterio; print(f'rasterio {rasterio.__version__}, GDAL {rasterio.__gdal_version__}')"
 
       - name: Upload wheel as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: rasterio-${{ inputs.rasterio_version }}-py${{ inputs.python_version }}-linux-aarch64
           path: dist/*.whl
@@ -73,7 +73,7 @@ jobs:
 
       - name: Create Release
         if: ${{ inputs.publish }}
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           tag_name: rasterio-${{ inputs.rasterio_version }}-py${{ inputs.python_version }}-arm64
           name: Rasterio ${{ inputs.rasterio_version }} (Python ${{ inputs.python_version }}, ARM64 Linux)
