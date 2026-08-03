@@ -1,0 +1,163 @@
+name: Build ARM64 Wheel In Base Image
+
+# Builds a wheel *inside* the consumer's own base image and skips auditwheel, so
+# the extension keeps linking that image's system libraries instead of vendoring
+# its own copies. Use this when the consumer image already ships the native
+# library (e.g. the osgeo GDAL images) and a second vendored copy in-process is
+# undesirable, or when the consumer's glibc is older than the manylinux tag that
+# build-wheel.yml produces.
+#
+# The resulting wheel carries a plain linux_aarch64 tag and is ONLY valid for the
+# image it was built in. For a portable, self-contained wheel use build-wheel.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package to build (e.g., rasterio==1.3.9)'
+        required: true
+        default: 'rasterio==1.3.9'
+      container_image:
+        description: 'Base image to build inside. The wheel is only valid for this image.'
+        required: true
+        default: 'ghcr.io/osgeo/gdal:ubuntu-small-3.8.5'
+      base_label:
+        description: 'Short label identifying the base image, used in the release tag'
+        required: true
+        default: 'gdal3.8.5-ubuntu22.04'
+      build_constraints:
+        description: 'pip constraints applied to the isolated build env'
+        required: false
+        default: 'setuptools<82'
+      publish:
+        description: 'Publish to GitHub Releases'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-wheel:
+    name: Build wheel in base image
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: ${{ inputs.container_image }}
+
+    steps:
+      - name: Install build toolchain
+        run: |
+          apt-get -y update
+          apt-get -y install --no-install-recommends \
+              python3-dev \
+              python3-pip \
+              build-essential
+
+      - name: Build wheel
+        env:
+          PACKAGE: ${{ inputs.package }}
+          BUILD_CONSTRAINTS: ${{ inputs.build_constraints }}
+        run: |
+          # rasterio 1.3.x setup.py imports pkg_resources, which setuptools 82
+          # removed. pip < 26.2 reads PIP_CONSTRAINT for isolated build envs;
+          # pip >= 26.2 only reads PIP_BUILD_CONSTRAINT, so export both.
+          echo "${BUILD_CONSTRAINTS}" > /tmp/build-constraints.txt
+          export PIP_CONSTRAINT=/tmp/build-constraints.txt
+          export PIP_BUILD_CONSTRAINT=/tmp/build-constraints.txt
+
+          pip install --no-cache-dir --upgrade pip wheel
+
+          PACKAGE_NAME="${PACKAGE%%[=<>!]*}"
+          echo "PACKAGE_NAME=${PACKAGE_NAME}" >> "$GITHUB_ENV"
+
+          # --no-deps keeps dependency wheels out of dist/; --no-binary forces a
+          # real compile rather than resolving the PyPI wheel we lack.
+          pip wheel --no-cache-dir --no-deps --no-binary "${PACKAGE_NAME}" "${PACKAGE}" -w dist/
+
+          ls -lh dist/
+          echo "WHEEL_NAME=$(ls dist/)" >> "$GITHUB_ENV"
+
+      - name: Test wheel
+        run: |
+          pip install --no-cache-dir "dist/${WHEEL_NAME}"
+          IMPORT_NAME="${PACKAGE_NAME//-/_}"
+          python3 -c "import ${IMPORT_NAME} as m; print(m.__name__, getattr(m, '__version__', 'n/a'))"
+
+          # A vendored native library would defeat the point of this workflow —
+          # the wheel must resolve the base image's libraries at load time.
+          python3 - <<'PY'
+          import importlib
+          import os
+
+          module = importlib.import_module(os.environ["PACKAGE_NAME"].replace("-", "_"))
+          package_dir = os.path.dirname(module.__file__)
+          # auditwheel uses a "<package>.libs" sibling, older tooling "<package>/.libs"
+          vendored = [d for d in (package_dir + ".libs", os.path.join(package_dir, ".libs"))
+                      if os.path.isdir(d)]
+          assert not vendored, f"wheel vendored libraries in {vendored}"
+          print("no vendored libraries, links the base image")
+          PY
+
+      - name: Report GDAL linkage
+        if: ${{ startsWith(inputs.package, 'rasterio') }}
+        run: |
+          python3 -c "import rasterio; print('rasterio', rasterio.__version__, 'links GDAL', rasterio.__gdal_version__)"
+          gdalinfo --version
+
+      - name: Set release identifiers
+        env:
+          BASE_LABEL: ${{ inputs.base_label }}
+        run: |
+          # Read version and python tag off the wheel the build actually produced,
+          # so they stay right whatever form the package input took.
+          PACKAGE_VERSION=$(echo "${WHEEL_NAME}" | cut -d- -f2)
+          PYTHON_TAG=$(echo "${WHEEL_NAME}" | cut -d- -f3)
+          {
+            echo "PACKAGE_VERSION=${PACKAGE_VERSION}"
+            echo "PYTHON_TAG=${PYTHON_TAG}"
+            echo "RELEASE_TAG=${PACKAGE_NAME}-${PACKAGE_VERSION}-${PYTHON_TAG}-${BASE_LABEL}-arm64"
+          } >> "$GITHUB_ENV"
+
+      - name: Upload wheel as artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ env.RELEASE_TAG }}
+          path: dist/*.whl
+          retention-days: 30
+
+      - name: Create Release
+        if: ${{ inputs.publish }}
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.PACKAGE_NAME }} ${{ env.PACKAGE_VERSION }} (${{ env.PYTHON_TAG }}, ${{ inputs.base_label }}, ARM64)
+          body: |
+            ## ${{ env.PACKAGE_NAME }} ${{ env.PACKAGE_VERSION }} for ARM64 Linux
+
+            Built inside `${{ inputs.container_image }}` with no `auditwheel repair`,
+            so the extension links that image's system libraries rather than
+            vendoring its own copies.
+
+            **Only install this wheel in `${{ inputs.container_image }}`.** It carries a
+            plain `linux_aarch64` platform tag, so pip will not reject it on a
+            mismatched glibc the way it would a manylinux wheel — the failure would
+            surface at import time instead. Rebuild it whenever the base image's
+            Python or native libraries change. For a portable wheel that runs
+            anywhere, use `build-wheel.yml` instead.
+
+            ### Installation
+
+            ```bash
+            pip install https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/${{ env.WHEEL_NAME }}
+            ```
+
+            In a requirements file, gate it on the architecture so x86_64 keeps
+            using the PyPI wheel:
+
+            ```
+            ${{ env.PACKAGE_NAME }} @ https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/${{ env.WHEEL_NAME }} ; platform_machine == "aarch64"
+            ${{ env.PACKAGE_NAME }}==${{ env.PACKAGE_VERSION }} ; platform_machine != "aarch64"
+            ```
+          files: dist/*.whl
+          draft: false
+          prerelease: false
