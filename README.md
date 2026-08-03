@@ -47,6 +47,32 @@ Use the generic workflow to build any package:
 
 There's also a [rasterio-specific workflow](../../actions/workflows/build-rasterio-wheels.yml) with `numpy<2` handling for 1.3.x versions.
 
+### In-Base-Image Workflow
+
+The workflows above target Ubuntu 24.04 and vendor the native library into the
+wheel via `auditwheel`. Use
+[Build ARM64 Wheel In Base Image](../../actions/workflows/build-wheel-in-base-image.yml)
+when that doesn't fit:
+
+- the consumer image is **older than Ubuntu 24.04**, so pip rejects a
+  `manylinux_2_39` wheel outright, or
+- the consumer image **already ships the native library** (e.g. the osgeo GDAL
+  images) and a second vendored copy in-process is undesirable
+
+It runs the build inside the consumer's own image and skips `auditwheel`, so the
+extension keeps linking that image's system libraries. Configure:
+
+- **Package**: e.g. `rasterio==1.3.9`
+- **Container image**: the consumer image, e.g. `ghcr.io/osgeo/gdal:ubuntu-small-3.8.5`
+- **Base label**: short identifier for the release tag, e.g. `gdal3.8.5-ubuntu22.04`
+- **Build constraints**: pip constraints for the isolated build env, default `setuptools<82`
+- **Publish**: `true` to create a GitHub Release
+
+The result carries a plain `linux_aarch64` tag and is valid **only** in that
+image — pip won't reject it on a mismatched glibc the way it would a manylinux
+wheel, so a mismatch surfaces at import time instead. Rebuild it when the base
+image's Python or native libraries change.
+
 ### PyTorch (Manual)
 
 PyTorch requires manual builds on EC2. See [pytorch/README.md](pytorch/README.md).
@@ -54,7 +80,8 @@ PyTorch requires manual builds on EC2. See [pytorch/README.md](pytorch/README.md
 ## System Requirements
 
 - **Architecture**: ARM64 (aarch64)
-- **OS**: Ubuntu 24.04+ (glibc 2.39+)
+- **OS**: Ubuntu 24.04+ (glibc 2.39+), or any image when built with the
+  [in-base-image workflow](#in-base-image-workflow)
 - **Python**: 3.10, 3.11, or 3.12
 
 ## Repository Structure
@@ -63,7 +90,8 @@ PyTorch requires manual builds on EC2. See [pytorch/README.md](pytorch/README.md
 ceres-wheels/
 ├── .github/workflows/
 │   ├── build-wheel.yml            # Generic wheel builder
-│   └── build-rasterio-wheels.yml  # Rasterio-specific
+│   ├── build-rasterio-wheels.yml  # Rasterio-specific
+│   └── build-wheel-in-base-image.yml  # Builds in the consumer image, no auditwheel
 ├── pytorch/
 │   ├── README.md                  # PyTorch build guide
 │   └── setup-ec2.sh               # EC2 setup script
